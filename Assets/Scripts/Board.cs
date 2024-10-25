@@ -6,6 +6,8 @@ using System.Linq;
 
 public class Board : MonoBehaviour
 {
+    public float timeBetweenPieces = 0.05f;
+
     public int width;
     public int height;
     public GameObject tileObject;
@@ -31,32 +33,37 @@ public class Board : MonoBehaviour
 
         SetupBoard();
         PositionCamera();
-        SetupPieces();
+        StartCoroutine(SetupPieces());
 
 
     }
-    private void SetupPieces()
+    private IEnumerator SetupPieces()
     {
         int maxIterations = 50;
         int currentIteration = 0;
         for (int x = 0; x < width; x++)
         {           
             for (int y = 0; y < height; y++)
-            { 
-               currentIteration = 0;
-               var newPiece = CreatePieceAt(x, y); 
-               while(HasPreviousMatches(x, y))
+            {
+               yield return new WaitForSeconds(timeBetweenPieces);
+                if (Pieces[x, y] == null)
                 {
-                    ClearPieceAt(x, y);
-                    newPiece = CreatePieceAt(x, y);
-                    currentIteration++;
-                    if(currentIteration > maxIterations)
+                    currentIteration = 0;
+                    var newPiece = CreatePieceAt(x, y);
+                    while (HasPreviousMatches(x, y))
                     {
-                        break;
+                        ClearPieceAt(x, y);
+                        newPiece = CreatePieceAt(x, y);
+                        currentIteration++;
+                        if (currentIteration > maxIterations)
+                        {
+                            break;
+                        }
                     }
                 }
             }
         }
+        yield return null;
     }
     private void ClearPieceAt(int x, int y) 
 {
@@ -128,11 +135,11 @@ public class Board : MonoBehaviour
         yield return new WaitForSeconds(0.6f);
 
         
-        var starMaches = GetMatchByPiece(startTile.x, startTile.y, 3);
+        var startMaches = GetMatchByPiece(startTile.x, startTile.y, 3);
         var endMatches = GetMatchByPiece(endTile.x, endTile.y, 3);
 
-        var allMatches = starMaches.Union(endMatches).ToList();
-
+        var allMatches = startMaches.Union(endMatches).ToList();
+        }
 
        
 
@@ -163,10 +170,41 @@ public class Board : MonoBehaviour
         });
         List<int> columns = GetColumns(piecesToClear);
         List<Piece> collapsedPieces = collapseColumns(columns, 0.3f);
+        FindMatchRecursively(collapsedPieces);
 
     }
-    private List<int> GetColumns(List<Piece> pieceToClear)
+    private void FindMatchRecursively(List<Piece> collapsedPieces)
     {
+        StartCoroutine(FindMatchRecursivelyCoroutine(collapsedPieces));
+    }
+    IEnumerator FindMatchRecursivelyCoroutine(List<Piece> collapsedPieces)
+    {
+        yield return new WaitForSeconds(1f);
+        List<Piece> newMatches = new List<Piece>();
+        collapsedPieces.ForEach(piece =>
+        {
+            var matches = GetMatchByPiece(piece.x, piece.y, 3);
+            if (matches != null)
+            {
+                newMatches = newMatches.Union(matches).ToList();
+                ClearPieces(matches);
+            }
+        });
+        if (newMatches.Count > 0)
+        {
+            var newCollapsedPieces = collapseColumns(GetColumns(newMatches), 0.3f);
+            FindMatchRecursively(newCollapsedPieces);
+        }
+        else 
+        {
+            yield return new WaitForSeconds(0.1f);
+            StartCoroutine(SetupPieces());
+        }
+        yield return null;
+    }
+
+    private List<int> GetColumns(List<Piece> pieceToClear)
+    { 
         var result = new List<int>();
         pieceToClear.ForEach(piece =>
         {
@@ -232,68 +270,68 @@ public class Board : MonoBehaviour
 
         return (downMatches.Count >0 || leftMatches.Count > 0);
     }
-    public List<Piece> GetMatchByDirection(int xpos, int ypos, Vector2 direction, int minPieces =3)
-    { 
-            List<Piece> matches = new List<Piece>();
-            Piece startPiece =  Pieces[xpos, ypos];
-            matches.Add(startPiece);
+    public List<Piece> GetMatchByDirection(int xpos, int ypos, Vector2 direction, int minPieces = 3)
+{
+    List<Piece> matches = new List<Piece>();
+    Piece startPiece = Pieces[xpos, ypos];
+    matches.Add(startPiece);
+    int nextX;
+    int nextY;
+    int maxVal = width > height ? width : height;
 
-            int nextX;
-            int nextY;
-            int maxVal = width > height ? width : height;
-
-            for (int i = 1; i<maxVal; i++)
+    for (int i = 1; i < maxVal; i++)
+    {
+        nextX = xpos + ((int)direction.x * i);
+        nextY = ypos + ((int)direction.y * i);
+        if (nextX >= 0 && nextX < width && nextY >= 0 && nextY < height)
+        {
+            var nextPiece = Pieces[nextX, nextY];
+            if (nextPiece != null && nextPiece.pieceType == startPiece.pieceType)
             {
-                nextX = xpos + ((int)direction.x * i);
-                nextY = ypos + ((int)direction.y * i);
-                if(nextX >= 0 && nextX < width && nextY >= 0 && nextY< height)
-                    {
-                    var nextPiece = Pieces[nextX, nextY];
-                    if(nextPiece !=null && nextPiece.pieceType == startPiece.pieceType)
-                            {
-                        matches.Add(nextPiece);
-                    }
-                    else
-                        {
-                        break;
-                         }
-                     }
-                 }
-                if (matches.Count >= minPieces)
-                   {
-                    return matches;
-                   }
-                return null;
+                matches.Add(nextPiece);
             }
-        public List<Piece> GetMatchByPiece(int xpos, int ypos, int minPieces = 3)
-        {
-            var upMatchs = GetMatchByDirection(xpos, ypos, new Vector2(0, 1), 2);
-            var downMatchs = GetMatchByDirection(xpos, ypos, new Vector2(0, -1), 2);
-            var rightMatchs = GetMatchByDirection(xpos, ypos, new Vector2(1, 0), 2);
-            var leftMatchs = GetMatchByDirection(xpos, ypos, new Vector2(-1, 0), 2);
-
-            if (upMatchs == null) upMatchs = new List<Piece>();
-            if (downMatchs == null) downMatchs = new List<Piece>();
-            if (rightMatchs == null) rightMatchs = new List<Piece>();
-            if (leftMatchs == null) leftMatchs = new List<Piece>();
-
-            var verticalMatches = upMatchs.Union(downMatchs).ToList();
-            var horizontalMatches = leftMatchs.Union(rightMatchs).ToList();
-
-            var foundMatches = new List<Piece>();
-            
-            if(verticalMatches.Count>= minPieces)
-        {
-                foundMatches = foundMatches.Union(verticalMatches).ToList();
-        }
-             if(horizontalMatches.Count >= minPieces)
-        {
-                 foundMatches = foundMatches.Union(horizontalMatches).ToList();
-        }
-              return foundMatches;
-
+            else
+            {
+                break;
+            }
         }
     }
+
+    if (matches.Count >= minPieces)
+    {
+        return matches;
+    }
+    return null;
+}
+
+    public List<Piece> GetMatchByPiece(int xpos, int ypos, int minPieces = 3)
+{
+    var upMatches = GetMatchByDirection(xpos, ypos, new Vector2(0, 1), 2);
+    var downMatches = GetMatchByDirection(xpos, ypos, new Vector2(0, -1), 2);
+    var rightMatches = GetMatchByDirection(xpos, ypos, new Vector2(1, 0), 2);
+    var leftMatches = GetMatchByDirection(xpos, ypos, new Vector2(-1, 0), 2);
+
+    if (upMatches == null) upMatches = new List<Piece>();
+    if (downMatches == null) downMatches = new List<Piece>();
+    if (rightMatches == null) rightMatches = new List<Piece>();
+    if (leftMatches == null) leftMatches = new List<Piece>();
+
+    var verticalMatches = upMatches.Union(downMatches).ToList();
+    var horizontalMatches = leftMatches.Union(rightMatches).ToList();
+    var foundMatches = new List<Piece>();
+
+    if (verticalMatches.Count >= minPieces)
+    {
+        foundMatches = foundMatches.Union(verticalMatches).ToList();
+    }
+    if (horizontalMatches.Count >= minPieces)
+    {
+        foundMatches = foundMatches.Union(horizontalMatches).ToList();
+    }
+ }
+
+
+
 
 
 

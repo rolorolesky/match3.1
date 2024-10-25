@@ -35,11 +35,13 @@ public class Piece : MonoBehaviour
             y = desY;
         };
 
-    }
-    [ContextMenu("Test Move")]
+    }   
+
+[ContextMenu("Test Move")]
     public void MoveTest()
     {
         Move(0, 0);
-    }
 }
+}
+
 
